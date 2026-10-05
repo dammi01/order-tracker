@@ -1,3 +1,4 @@
+import logging
 import os
 import sqlite3
 from contextlib import asynccontextmanager
@@ -8,7 +9,13 @@ from uuid import uuid4
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
+from app.otel import setup_observability
+
+setup_observability()
+
+logger = logging.getLogger("order-tracker")
 
 DB_PATH = Path(os.getenv("ORDER_DB_PATH", "data/orders.db"))
 STATUSES = {"received", "preparing", "shipped", "delivered"}
@@ -77,6 +84,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Order Tracker", lifespan=lifespan)
+FastAPIInstrumentor.instrument_app(app)
 
 
 @app.get("/")
@@ -103,7 +111,9 @@ def get_order(order_id: str):
     with connect() as db:
         row = db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
     if row is None:
+        logger.warning("order lookup miss order_id=%s", order_id)
         raise HTTPException(404, "Order not found")
+    logger.info("order lookup hit order_id=%s", order_id)
     return order_detail(row)
 
 

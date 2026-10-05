@@ -1,0 +1,7 @@
+```json
+{
+  "diagnosis": "Test alert (ResponderTest) – no actual incident detected.",
+  "action": "No remedial action required; this is a harmless test notification.",
+  "confidence": 0.99
+}
+```
