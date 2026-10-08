@@ -1,5 +1,8 @@
 name: order-tracker
 
+include:
+  - observability/compose.yaml
+
 services:
   app:
     image: order-tracker:${ORDER_TRACKER_TAG:-local}
@@ -8,6 +11,10 @@ services:
       - "127.0.0.1:${ORDER_TRACKER_PORT:-8000}:8000"
     environment:
       ORDER_DB_PATH: /data/orders.db
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_EXPORTER_OTLP_PROTOCOL: grpc
+    depends_on:
+      - otel-collector
     volumes:
       - orders:/data
     restart: unless-stopped

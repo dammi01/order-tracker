@@ -1,0 +1,35 @@
+{
+  "uid": "order-tracker",
+  "title": "Order Tracker Overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "type": "timeseries", "title": "Requests by status code (per minute)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "sum by (http_status_code) (increase(http_server_duration_milliseconds_count[1m]))", "legendFormat": "{{http_status_code}}" } ]
+    },
+    {
+      "id": 2, "type": "stat", "title": "5xx in last 5 min",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "sum(increase(http_server_duration_milliseconds_count{http_status_code=~\"5..\"}[5m])) or vector(0)" } ],
+      "fieldConfig": { "defaults": { "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] }
+    },
+    {
+      "id": 3, "type": "stat", "title": "Total requests (5 min)",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [ { "refId": "A", "expr": "sum(increase(http_server_duration_milliseconds_count[5m]))" } ]
+    },
+    {
+      "id": 4, "type": "logs", "title": "App logs",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [ { "refId": "A", "expr": "{service_name=\"order-tracker\"}" } ]
+    }
+  ]
+}

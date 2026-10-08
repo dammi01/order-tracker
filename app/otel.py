@@ -1,11 +1,18 @@
 import logging
+import os
 
 from opentelemetry import trace, metrics
+from opentelemetry._logs import set_logger_provider
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor, ConsoleSpanExporter
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.metrics import MeterProvider
-from opentelemetry.sdk.metrics.export import ConsoleMetricExporter, PeriodicExportingMetricReader
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
 from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.instrumentation.sqlite3 import SQLite3Instrumentor
 
@@ -13,19 +20,25 @@ _RESOURCE = Resource.create({"service.name": "order-tracker"})
 
 
 def setup_observability() -> None:
-    # Traces: SimpleSpanProcessor exporta na hora (bom pra ver no console em tempo real;
-    # trocaremos por BatchSpanProcessor quando o Q3 mandar isso pro Collector).
+    # All three signals go to the OpenTelemetry Collector.
+    # The endpoint comes from OTEL_EXPORTER_OTLP_ENDPOINT (set in compose.yaml).
+
+    # Traces
     tracer_provider = TracerProvider(resource=_RESOURCE)
-    tracer_provider.add_span_processor(SimpleSpanProcessor(ConsoleSpanExporter()))
+    tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
     trace.set_tracer_provider(tracer_provider)
 
-    # Metrics: ciclo de export a cada 5s
-    reader = PeriodicExportingMetricReader(ConsoleMetricExporter(), export_interval_millis=5000)
+    # Metrics: export every 5s so Prometheus/Grafana react quickly
+    reader = PeriodicExportingMetricReader(OTLPMetricExporter(), export_interval_millis=5000)
     metrics.set_meter_provider(MeterProvider(resource=_RESOURCE, metric_readers=[reader]))
 
-    # Logs: injeta trace_id/span_id em cada linha de log automaticamente
+    # Logs: inject trace_id/span_id into each record, then ship records via OTLP
     LoggingInstrumentor().instrument(set_logging_format=True)
     logging.basicConfig(level=logging.INFO)
+    logger_provider = LoggerProvider(resource=_RESOURCE)
+    logger_provider.add_log_record_processor(BatchLogRecordProcessor(OTLPLogExporter()))
+    set_logger_provider(logger_provider)
+    logging.getLogger().addHandler(LoggingHandler(level=logging.INFO, logger_provider=logger_provider))
 
-    # Spans automáticos para cada query sqlite3
+    # Automatic spans for each sqlite3 query
     SQLite3Instrumentor().instrument()
